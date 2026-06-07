@@ -8,7 +8,11 @@ import { useState, useEffect } from 'preact/hooks';
 const PRODUCTION_APP_URL = 'https://services-booking-kappa.vercel.app';
 
 function getAppUrl() {
-  return (shopify.extension?.settings?.app_url || PRODUCTION_APP_URL).replace(/\/$/, '');
+  try {
+    return String(globalThis.shopify?.settings?.value?.app_url || PRODUCTION_APP_URL).replace(/\/$/, '');
+  } catch {
+    return PRODUCTION_APP_URL;
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -336,30 +340,40 @@ function PackagesPage() {
   useEffect(() => {
     async function init() {
       try {
-        // Query Customer Account API for current customer
-        const result = await shopify.customerAccount.query(`
-          query {
-            customer {
-              id
-              emailAddress { emailAddress }
-              firstName
-              lastName
-            }
-          }
-        `);
-        const c = result?.data?.customer;
-        if (!c) { setError('Não foi possível identificar o cliente.'); setLoading(false); return; }
-        // Extract numeric ID from GID
-        const numericId = c.id.split('/').pop();
-        const shop = shopify.shop ?? '';
-        setCustomer({ id: numericId, email: c.emailAddress?.emailAddress ?? '', name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() });
+        const shopifyGlobal = globalThis.shopify;
+        if (!shopifyGlobal?.authenticatedAccount) {
+          setError('API do cliente não disponível. Certifica-te que estás autenticado.');
+          setLoading(false);
+          return;
+        }
+
+        // Customer ID comes from the authenticated account signal
+        const customerData = shopifyGlobal.authenticatedAccount.customer.value;
+        if (!customerData?.id) {
+          setError('Não foi possível identificar o cliente. Certifica-te que estás autenticado.');
+          setLoading(false);
+          return;
+        }
+        const numericId = customerData.id.split('/').pop();
+
+        // Shop domain comes from the session token JWT (dest claim = "https://store.myshopify.com")
+        const token = await shopifyGlobal.sessionToken.get();
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const shop = String(payload.dest ?? '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+        if (!shop) {
+          setError('Não foi possível determinar a loja.');
+          setLoading(false);
+          return;
+        }
+
+        setCustomer({ id: numericId, email: '', name: '', shop });
 
         // Fetch packages
         const r = await fetch(`${appUrl}/customer-api/packages?shop=${encodeURIComponent(shop)}&customerId=${encodeURIComponent(numericId)}`);
         const data = await r.json();
         setPackages(data.packages ?? []);
       } catch (e) {
-        setError('Erro ao carregar pacotes: ' + e.message);
+        setError('Erro ao carregar pacotes: ' + (e?.message ?? 'erro desconhecido'));
       }
       setLoading(false);
     }
@@ -370,15 +384,14 @@ function PackagesPage() {
     if (!customer) return;
     setLoading(true);
     try {
-      const shop = shopify.shop ?? '';
-      const r = await fetch(`${appUrl}/customer-api/packages?shop=${encodeURIComponent(shop)}&customerId=${encodeURIComponent(customer.id)}`);
+      const r = await fetch(`${appUrl}/customer-api/packages?shop=${encodeURIComponent(customer.shop)}&customerId=${encodeURIComponent(customer.id)}`);
       const data = await r.json();
       setPackages(data.packages ?? []);
     } catch {}
     setLoading(false);
   }
 
-  const shop = shopify.shop ?? '';
+  const shop = customer?.shop ?? '';
 
   return (
     <div style={{ fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif', maxWidth:'680px', margin:'0 auto', padding:'24px 16px' }}>
@@ -426,5 +439,13 @@ function PackagesPage() {
 }
 
 export default async () => {
-  render(<PackagesPage />, document.body);
+  try {
+    const root = document.body || document.documentElement;
+    render(<PackagesPage />, root);
+  } catch (err) {
+    console.error('[BookingExtension] Render failed:', err);
+    if (document.body) {
+      document.body.innerHTML = `<div style="padding:24px;font-family:sans-serif;color:#b91c1c">❌ Erro ao carregar a extensão: ${err.message}</div>`;
+    }
+  }
 };
