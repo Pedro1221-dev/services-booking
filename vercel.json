@@ -2,14 +2,14 @@
   "buildCommand": "npx prisma generate && npx prisma migrate deploy && npm run build",
   "installCommand": "npm install",
   "framework": null,
+  "outputDirectory": "build/client",
   "regions": ["lhr1"],
   "functions": {
-    "build/server/index.js": {
+    "api/index.js": {
       "maxDuration": 30
     }
   },
   "rewrites": [
-    { "source": "/assets/(.*)", "destination": "/build/client/assets/$1" },
-    { "source": "/(.*)", "destination": "/build/server/index.js" }
+    { "source": "/(.*)", "destination": "/api/index" }
   ]
 }
