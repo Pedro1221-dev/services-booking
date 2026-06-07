@@ -26,7 +26,10 @@ api_version = "2026-07"
   include_fields = [ "id", "name", "order_number", "customer", "line_items" ]
 
 [auth]
-redirect_urls = [ "https://services-booking-kappa.vercel.app/api/auth" ]
+redirect_urls = [
+  "https://services-booking-kappa.vercel.app/auth/callback",
+  "https://services-booking-kappa.vercel.app/auth"
+]
 
 [build]
 automatically_update_urls_on_dev = true

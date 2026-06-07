@@ -5,8 +5,10 @@ import { useState, useEffect } from 'preact/hooks';
 // ── Config ───────────────────────────────────────────────────────────────────
 // The app URL is injected via the extension settings in shopify.extension.toml
 // We fall back to reading it from shopify.extension settings at runtime.
+const PRODUCTION_APP_URL = 'https://services-booking-kappa.vercel.app';
+
 function getAppUrl() {
-  return (shopify.extension?.settings?.app_url ?? '').replace(/\/$/, '');
+  return (shopify.extension?.settings?.app_url || PRODUCTION_APP_URL).replace(/\/$/, '');
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
