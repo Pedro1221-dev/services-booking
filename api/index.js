@@ -1,7 +1,6 @@
-import pkg from "@react-router/node";
-const { createRequestHandler } = pkg;
+import { createRequestListener } from "@react-router/node";
 
-export default createRequestHandler({
+export default createRequestListener({
   build: () => import("../build/server/index.js"),
   mode: process.env.NODE_ENV,
 });
