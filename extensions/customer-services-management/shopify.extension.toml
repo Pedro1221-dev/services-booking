@@ -1,0 +1,17 @@
+# Customer Account UI Extension — Marcações & Pacotes
+api_version = "2026-04"
+
+[[extensions]]
+name = "Customer Services Management"
+handle = "customer-services-management"
+type = "ui_extension"
+uid = "a7e628c2-8608-04ca-7a29-fec9bfaf2d7a129e703f"
+
+# Full page in customer account — shows packages + bookings
+[[extensions.targeting]]
+module = "./src/PackagesPage.jsx"
+target = "customer-account.page.render"
+
+[extensions.capabilities]
+api_access = true
+network_access = true

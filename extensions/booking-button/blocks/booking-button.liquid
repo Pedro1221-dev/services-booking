@@ -1,0 +1,479 @@
+{% comment %}
+  Booking Button Block — Two-panel modal (calendar + slots)
+  Step 1: Pick date (custom calendar) + time slot
+  Step 2: Confirm → creates booking in DB → adds to cart → checkout
+{% endcomment %}
+
+{% assign is_service = false %}
+{% for tag in product.tags %}
+  {% if tag == 'servico' or tag == 'serviço' %}
+    {% assign is_service = true %}
+  {% endif %}
+{% endfor %}
+
+{% if is_service %}
+<style>
+  .bk-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55); z-index: 99999;
+    align-items: center; justify-content: center;
+    padding: 16px; box-sizing: border-box;
+    backdrop-filter: blur(3px);
+  }
+  .bk-modal {
+    background: #fff; border-radius: 16px;
+    width: min(860px, 100%); max-height: 92vh;
+    overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.22);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    animation: bk-fadein 0.2s ease;
+  }
+  @keyframes bk-fadein { from { opacity:0; transform:scale(0.97); } to { opacity:1; transform:scale(1); } }
+  .bk-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px 16px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0;
+  }
+  .bk-header h2 { margin:0; font-size:17px; font-weight:700; color:#111; letter-spacing:-0.2px; }
+  .bk-close {
+    background:#f4f4f5; border:none; border-radius:50%;
+    width:32px; height:32px; font-size:16px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; color:#555; transition:background 0.15s;
+  }
+  .bk-close:hover { background:#e4e4e7; }
+  .bk-body { display:flex; overflow:hidden; height:440px; }
+  /* ── Calendar ── */
+  .bk-cal {
+    width:300px; flex-shrink:0; padding:24px 20px;
+    background:#1a1f2e; color:#fff;
+    display:flex; flex-direction:column; gap:18px;
+  }
+  .bk-cal-nav { display:flex; align-items:center; justify-content:space-between; }
+  .bk-cal-nav-label { font-size:15px; font-weight:700; }
+  .bk-cal-nav-label em { font-style:normal; color:#7c8db5; font-weight:400; }
+  .bk-nav-btn {
+    background:rgba(255,255,255,0.08); border:none; border-radius:8px;
+    width:32px; height:32px; cursor:pointer; color:#fff; font-size:18px;
+    display:flex; align-items:center; justify-content:center; transition:background 0.15s; line-height:1;
+  }
+  .bk-nav-btn:hover { background:rgba(255,255,255,0.16); }
+  .bk-nav-btn:disabled { opacity:0.25; cursor:default; }
+  .bk-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .bk-cal-dow {
+    text-align:center; font-size:10px; font-weight:700;
+    color:#7c8db5; text-transform:uppercase; letter-spacing:0.5px; padding:4px 0 8px;
+  }
+  .bk-cal-day {
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    border-radius:50%; font-size:13px; cursor:pointer; border:none;
+    background:transparent; color:#fff; transition:background 0.15s, color 0.15s; position:relative;
+  }
+  .bk-cal-day:hover:not(:disabled):not(.bk-sel) { background:rgba(255,255,255,0.12); }
+  .bk-cal-day:disabled { color:#3d4560; cursor:default; }
+  .bk-cal-day.bk-today::after {
+    content:''; position:absolute; bottom:3px; left:50%; transform:translateX(-50%);
+    width:4px; height:4px; border-radius:50%; background:#6c8ef0;
+  }
+  .bk-cal-day.bk-sel { background:#fff; color:#1a1f2e; font-weight:700; }
+  /* ── Slots panel ── */
+  .bk-slots-panel { flex:1; padding:20px 20px 0; overflow-y:auto; display:flex; flex-direction:column; min-height:0; }
+  .bk-slots-title { font-size:15px; font-weight:700; color:#111; margin:0 0 3px; flex-shrink:0; }
+  .bk-slots-sub { font-size:12px; color:#999; margin:0 0 14px; flex-shrink:0; }
+  .bk-slots-list { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; padding-bottom:16px; align-content:start; }
+  .bk-slot-btn {
+    padding:10px 6px; border:1.5px solid #ececec; border-radius:8px;
+    background:#fff; cursor:pointer; display:flex; flex-direction:column;
+    align-items:center; gap:3px; font-size:13px; font-weight:600; color:#111;
+    transition:all 0.15s; text-align:center;
+  }
+  .bk-slot-btn:hover:not(:disabled) { border-color:#111; background:#fafafa; }
+  .bk-slot-btn.bk-slot-sel { border-color:#111; background:#111; color:#fff; }
+  .bk-slot-btn:disabled { background:#fafafa; color:#ccc; border-color:#f0f0f0; cursor:default; }
+  .bk-slot-badge {
+    font-size:10px; font-weight:500; padding:1px 6px; border-radius:20px;
+    background:#f0f0f0; color:#888; white-space:nowrap;
+  }
+  .bk-slot-btn.bk-slot-sel .bk-slot-badge { background:rgba(255,255,255,0.18); color:rgba(255,255,255,0.75); }
+  .bk-slot-btn:disabled .bk-slot-badge { background:transparent; color:#ccc; font-size:9px; }
+  .bk-ph {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    flex:1; color:#ccc; font-size:13px; text-align:center; padding:20px; gap:10px; min-height:200px;
+  }
+  .bk-ph svg { opacity:0.35; }
+  .bk-empty { display:none; text-align:center; padding:20px 0; color:#999; font-size:13px; min-height:80px; display:none; align-items:center; justify-content:center; }
+  .bk-loading-slots { display:none; text-align:center; padding:20px 0; color:#888; font-size:13px; min-height:80px; align-items:center; justify-content:center; flex-direction:column; gap:10px; }
+  /* ── Footer ── */
+  .bk-footer {
+    padding:16px 24px; border-top:1px solid #f0f0f0;
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0;
+  }
+  .bk-footer-info { font-size:13px; color:#888; line-height:1.5; }
+  .bk-footer-info strong { color:#111; display:block; font-size:14px; font-weight:700; }
+  .bk-btn-primary {
+    padding:12px 28px; background:#111; color:#fff; border:none; border-radius:10px;
+    font-size:15px; font-weight:700; cursor:pointer; white-space:nowrap; transition:opacity 0.15s, transform 0.1s;
+    flex-shrink:0;
+  }
+  .bk-btn-primary:disabled { opacity:0.3; cursor:default; }
+  .bk-btn-primary:not(:disabled):hover { opacity:0.85; }
+  .bk-btn-primary:not(:disabled):active { transform:scale(0.98); }
+  .bk-btn-ghost {
+    padding:12px 20px; background:none; border:1.5px solid #ddd; border-radius:10px;
+    cursor:pointer; font-size:14px; font-weight:600; color:#555; transition:border-color 0.15s;
+  }
+  .bk-btn-ghost:hover { border-color:#555; }
+  /* ── Step 2 ── */
+  .bk-confirm-body { padding:24px 28px; display:flex; flex-direction:column; gap:18px; overflow-y:auto; }
+  .bk-confirm-card {
+    background:#f8f8f8; border-radius:12px; padding:20px;
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .bk-confirm-row { display:flex; align-items:flex-start; gap:14px; }
+  .bk-confirm-icon {
+    width:38px; height:38px; border-radius:9px; background:#fff;
+    border:1px solid #eee; display:flex; align-items:center; justify-content:center;
+    font-size:18px; flex-shrink:0;
+  }
+  .bk-confirm-lbl { font-size:11px; font-weight:700; color:#aaa; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px; }
+  .bk-confirm-val { font-size:15px; font-weight:600; color:#111; }
+  .bk-divider { height:1px; background:#eee; }
+  .bk-notice {
+    background:#fffbeb; border:1px solid #fde68a; border-radius:10px;
+    padding:14px 16px; font-size:13px; color:#92400e; line-height:1.5; display:flex; gap:10px;
+  }
+  .bk-err {
+    display:none; background:#fef2f2; border:1px solid #fecaca;
+    border-radius:8px; padding:12px 14px; font-size:13px; color:#b91c1c;
+  }
+  /* ── Step 3 ── */
+  .bk-loading-body {
+    padding:64px 28px; text-align:center;
+    display:flex; flex-direction:column; align-items:center; gap:16px;
+  }
+  .bk-spinner {
+    width:44px; height:44px; border:3px solid #eee; border-top-color:#111;
+    border-radius:50%; animation:bk-spin 0.7s linear infinite;
+  }
+  @keyframes bk-spin { to { transform:rotate(360deg); } }
+  @media (max-width:600px) {
+    .bk-body { flex-direction:column; min-height:unset; }
+    .bk-cal { width:100%; }
+    .bk-footer { flex-direction:column; align-items:stretch; }
+    .bk-btn-primary, .bk-btn-ghost { text-align:center; }
+  }
+</style>
+
+<div id="booking-block-{{ block.id }}" {{ block.shopify_attributes }}>
+  <button
+    id="open-booking-{{ block.id }}"
+    type="button"
+    style="display:none;"
+  ></button>
+
+  <div id="booking-modal-{{ block.id }}" class="bk-overlay">
+
+    <!-- STEP 1 -->
+    <div class="bk-modal" id="bks1-{{ block.id }}">
+      <div class="bk-header">
+        <h2>📅 {{ product.title | escape }}</h2>
+        <button class="bk-close" id="bkclose-{{ block.id }}">&#x2715;</button>
+      </div>
+      <div class="bk-body">
+        <!-- Calendar -->
+        <div class="bk-cal">
+          <div class="bk-cal-nav">
+            <button class="bk-nav-btn" id="bkprev-{{ block.id }}">&#8249;</button>
+            <span class="bk-cal-nav-label" id="bkmlbl-{{ block.id }}"></span>
+            <button class="bk-nav-btn" id="bknext-{{ block.id }}">&#8250;</button>
+          </div>
+          <div class="bk-cal-grid" id="bkcal-{{ block.id }}"></div>
+        </div>
+        <!-- Slots -->
+        <div class="bk-slots-panel">
+          <p class="bk-slots-title">Qual o horário?</p>
+          <p class="bk-slots-sub">&#127758; Europe/Lisbon</p>
+          <div id="bkph-{{ block.id }}" class="bk-ph">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+            </svg>
+            <span>Seleciona um dia<br>no calendário</span>
+          </div>
+          <div id="bkloading-{{ block.id }}" class="bk-loading-slots">
+            <div class="bk-spinner" style="margin:0 auto 12px;"></div>A carregar horários...
+          </div>
+          <div id="bkempty-{{ block.id }}" class="bk-empty">😔 Sem horários disponíveis para este dia.</div>
+          <div id="bkslots-{{ block.id }}" class="bk-slots-list"></div>
+        </div>
+      </div>
+      <div class="bk-footer">
+        <div class="bk-footer-info">
+          <strong id="bkfd-{{ block.id }}" style="color:#bbb;">Nenhum dia selecionado</strong>
+          <span id="bkft-{{ block.id }}" style="color:#bbb;">Escolhe um horário</span>
+        </div>
+        <button class="bk-btn-primary" id="bkconfirm-{{ block.id }}" disabled>Confirmar &rarr;</button>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="bk-modal" id="bks2-{{ block.id }}" style="display:none;max-width:480px;">
+      <div class="bk-header">
+        <h2>Confirmar marcação</h2>
+        <button class="bk-close" id="bkclose2-{{ block.id }}">&#x2715;</button>
+      </div>
+      <div class="bk-confirm-body">
+        <div class="bk-confirm-card">
+          <div class="bk-confirm-row">
+            <div class="bk-confirm-icon">🏥</div>
+            <div><div class="bk-confirm-lbl">Serviço</div><div class="bk-confirm-val" id="bkcf-sv-{{ block.id }}"></div></div>
+          </div>
+          <div class="bk-divider"></div>
+          <div class="bk-confirm-row">
+            <div class="bk-confirm-icon">📅</div>
+            <div><div class="bk-confirm-lbl">Data</div><div class="bk-confirm-val" id="bkcf-dt-{{ block.id }}"></div></div>
+          </div>
+          <div class="bk-confirm-row">
+            <div class="bk-confirm-icon">🕐</div>
+            <div><div class="bk-confirm-lbl">Hora</div><div class="bk-confirm-val" id="bkcf-tm-{{ block.id }}"></div></div>
+          </div>
+        </div>
+        <div class="bk-notice">
+          <span>💳</span>
+          <span>A marcação do horário fica reservada <strong>após o pagamento</strong>. Ao confirmar será redirecionado para o checkout do Shopify.</span>
+        </div>
+        <div class="bk-err" id="bkerr-{{ block.id }}"></div>
+      </div>
+      <div class="bk-footer">
+        <button class="bk-btn-ghost" id="bkback-{{ block.id }}">&#8592; Voltar</button>
+        <button class="bk-btn-primary" id="bkcheckout-{{ block.id }}">Ir para o checkout &#8594;</button>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="bk-modal" id="bks3-{{ block.id }}" style="display:none;max-width:360px;">
+      <div class="bk-loading-body">
+        <div class="bk-spinner"></div>
+        <p style="font-size:17px;font-weight:700;margin:0;color:#111;">A processar...</p>
+        <p style="font-size:13px;color:#888;margin:0;">Aguarda um momento.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  var ID  = {{ block.id | json }};
+  var pid = {{ product.id | json }};
+  var vid = {{ product.first_available_variant.id | json }};
+  var ptitle = {{ product.title | json }};
+  var appUrl = {{ block.settings.app_url | json }};
+  var shop   = {{ shop.permanent_domain | json }};
+
+  var overlay    = document.getElementById('booking-modal-' + ID);
+  var openBtn    = document.getElementById('open-booking-' + ID);
+  var s1 = document.getElementById('bks1-' + ID);
+  var s2 = document.getElementById('bks2-' + ID);
+  var s3 = document.getElementById('bks3-' + ID);
+
+  var closeBtn   = document.getElementById('bkclose-' + ID);
+  var closeBtn2  = document.getElementById('bkclose2-' + ID);
+  var prevBtn    = document.getElementById('bkprev-' + ID);
+  var nextBtn    = document.getElementById('bknext-' + ID);
+  var monthLbl   = document.getElementById('bkmlbl-' + ID);
+  var calGrid    = document.getElementById('bkcal-' + ID);
+  var ph         = document.getElementById('bkph-' + ID);
+  var loadEl     = document.getElementById('bkloading-' + ID);
+  var emptyEl    = document.getElementById('bkempty-' + ID);
+  var slotsList  = document.getElementById('bkslots-' + ID);
+  var footDate   = document.getElementById('bkfd-' + ID);
+  var footTime   = document.getElementById('bkft-' + ID);
+  var confirmBtn = document.getElementById('bkconfirm-' + ID);
+  var cfSv  = document.getElementById('bkcf-sv-' + ID);
+  var cfDt  = document.getElementById('bkcf-dt-' + ID);
+  var cfTm  = document.getElementById('bkcf-tm-' + ID);
+  var backBtn    = document.getElementById('bkback-' + ID);
+  var checkoutBtn= document.getElementById('bkcheckout-' + ID);
+  var errEl      = document.getElementById('bkerr-' + ID);
+
+  if (!overlay || !openBtn) return;
+
+  var MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  var today = new Date(); today.setHours(0,0,0,0);
+  var vy = today.getFullYear(), vm = today.getMonth();
+  var selDate = null, selTime = '';
+
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function dateStr(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function dateLbl(d){ return d.getDate()+' de '+MONTHS[d.getMonth()]+' '+d.getFullYear(); }
+
+  function renderCal() {
+    monthLbl.innerHTML = MONTHS[vm] + ' <em style="color:#7c8db5;font-weight:400;font-style:normal;">' + vy + '</em>';
+    prevBtn.disabled = (vy === today.getFullYear() && vm === today.getMonth());
+    calGrid.innerHTML = '';
+    ['2ª','3ª','4ª','5ª','6ª','SÁ','DO'].forEach(function(d){
+      var el = document.createElement('div');
+      el.className = 'bk-cal-dow'; el.textContent = d;
+      calGrid.appendChild(el);
+    });
+    var first = new Date(vy, vm, 1);
+    var offset = (first.getDay() + 6) % 7;
+    for (var i=0; i<offset; i++) calGrid.appendChild(document.createElement('div'));
+    var days = new Date(vy, vm+1, 0).getDate();
+    for (var d=1; d<=days; d++) {
+      var dd = new Date(vy, vm, d);
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'bk-cal-day'; btn.textContent = d;
+      if (dd < today) { btn.disabled = true; }
+      if (dd.getTime() === today.getTime()) btn.classList.add('bk-today');
+      if (selDate && dd.getTime() === selDate.getTime()) btn.classList.add('bk-sel');
+      if (!btn.disabled) {
+        (function(date){ btn.addEventListener('click', function(){
+          selDate = date; selTime = '';
+          updateFooter(); renderCal(); loadSlots();
+        }); })(dd);
+      }
+      calGrid.appendChild(btn);
+    }
+  }
+
+  function updateFooter() {
+    if (!selDate) {
+      footDate.textContent = 'Nenhum dia selecionado'; footDate.style.color = '#bbb';
+      footTime.textContent = 'Escolhe um horário';     footTime.style.color = '#bbb';
+      confirmBtn.disabled = true; return;
+    }
+    footDate.textContent = dateLbl(selDate); footDate.style.color = '#111';
+    if (selTime) {
+      footTime.textContent = '🕐 ' + selTime; footTime.style.color = '#111';
+      confirmBtn.disabled = false;
+    } else {
+      footTime.textContent = 'Escolhe um horário'; footTime.style.color = '#888';
+      confirmBtn.disabled = true;
+    }
+  }
+
+  function loadSlots() {
+    ph.style.display = 'none'; emptyEl.style.display = 'none';
+    slotsList.innerHTML = ''; loadEl.style.display = 'block';
+    fetch(appUrl+'/storefront/availability?shop='+encodeURIComponent(shop)+'&productId='+encodeURIComponent(pid)+'&date='+encodeURIComponent(dateStr(selDate)))
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        loadEl.style.display = 'none';
+        var slots = data.slots || [];
+        if (data.unavailableDay || !slots.length) { emptyEl.style.display = 'block'; return; }
+        slots.forEach(function(slot){
+          var btn = document.createElement('button');
+          btn.type = 'button'; btn.className = 'bk-slot-btn';
+          btn.disabled = !slot.available;
+          var t = document.createElement('span'); t.textContent = slot.time;
+          var b = document.createElement('span'); b.className = 'bk-slot-badge';
+          b.textContent = slot.available ? 'Disponível' : 'Esgotado';
+          btn.appendChild(t); btn.appendChild(b);
+          if (slot.available) {
+            btn.addEventListener('click', function(){
+              slotsList.querySelectorAll('.bk-slot-btn').forEach(function(x){ x.classList.remove('bk-slot-sel'); });
+              btn.classList.add('bk-slot-sel'); selTime = slot.time; updateFooter();
+            });
+          }
+          slotsList.appendChild(btn);
+        });
+      })
+      .catch(function(){ loadEl.style.display='none'; emptyEl.style.display='block'; });
+  }
+
+  prevBtn.addEventListener('click', function(){ if(vm===0){vy--;vm=11;}else vm--; renderCal(); });
+  nextBtn.addEventListener('click', function(){ if(vm===11){vy++;vm=0;}else vm++; renderCal(); });
+
+  function openModal() {
+    overlay.style.display='flex'; document.body.style.overflow='hidden';
+    renderCal(); updateFooter();
+  }
+
+  openBtn.addEventListener('click', openModal);
+
+  window.afOpenBooking = function(variantId) {
+    vid = variantId;
+    openModal();
+  };
+
+  function closeModal(){
+    overlay.style.display='none'; document.body.style.overflow='';
+    s1.style.display=''; s2.style.display='none'; s3.style.display='none';
+    selDate=null; selTime=''; slotsList.innerHTML='';
+    ph.style.display=''; loadEl.style.display='none'; emptyEl.style.display='none';
+    errEl.style.display='none';
+  }
+
+  closeBtn.addEventListener('click', closeModal);
+  closeBtn2.addEventListener('click', closeModal);
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) closeModal(); });
+
+  confirmBtn.addEventListener('click', function(){
+    if(!selDate||!selTime) return;
+    cfSv.textContent = ptitle; cfDt.textContent = dateLbl(selDate); cfTm.textContent = selTime;
+    errEl.style.display = 'none';
+    s1.style.display='none'; s2.style.display='';
+  });
+
+  backBtn.addEventListener('click', function(){ s2.style.display='none'; s1.style.display=''; });
+
+  checkoutBtn.addEventListener('click', function(){
+    if(!selDate||!selTime) return;
+    if(!vid) {
+      errEl.textContent = '❌ Produto sem variante disponível. Verifica se o produto está publicado na loja e com stock configurado.';
+      errEl.style.display='block'; return;
+    }
+    errEl.style.display='none'; s2.style.display='none'; s3.style.display='';
+    var ds = dateStr(selDate);
+    // Add to cart — booking is created by orders/paid webhook after payment
+    fetch('/cart/add.js', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ items:[{ id:vid, quantity:1, properties:{
+        '_booking_shop': shop,
+        '_booking_product_id': String(pid),
+        'Data da marcação': ds,
+        'Hora da marcação': selTime
+      }}] })
+    })
+    .then(function(r){
+      if(!r.ok) return r.json().then(function(err){ throw err; });
+      window.location.href='/checkout';
+    })
+    .catch(function(err){
+      s3.style.display='none'; s2.style.display='';
+      var msg = (err && err.description) ? err.description : 'Erro ao adicionar ao carrinho. Tenta novamente.';
+      errEl.textContent = '❌ ' + msg;
+      errEl.style.display='block';
+    });
+  });
+})();
+</script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Booking Button",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "App URL",
+      "info": "The public URL of your Shopify app (e.g. https://your-tunnel.trycloudflare.com)"
+    },
+    {
+      "type": "color",
+      "id": "button_color",
+      "label": "Button colour",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button text colour",
+      "default": "#ffffff"
+    }
+  ]
+}
+{% endschema %}

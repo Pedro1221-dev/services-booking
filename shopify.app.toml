@@ -1,0 +1,32 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "d9c9e2f6f4e98a5bdaace627797863bd"
+name = "services-booking"
+application_url = "https://assurance-commands-provisions-luxury.trycloudflare.com"
+embedded = true
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_products,write_metaobjects,write_metaobject_definitions,read_orders,read_customers"
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/paid"
+  topics = [ "orders/paid" ]
+  include_fields = [ "id", "name", "order_number", "customer", "line_items" ]
+
+[auth]
+redirect_urls = [ "https://assurance-commands-provisions-luxury.trycloudflare.com/api/auth" ]
+
+[build]
+automatically_update_urls_on_dev = true

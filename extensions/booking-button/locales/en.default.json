@@ -1,0 +1,27 @@
+{
+  "ratings": {
+    "stars": {
+      "label": "Ratings"
+    },
+    "home": {
+      "recommendationText": "Recommended Product!"
+    }
+  },
+  "booking": {
+    "button_label": "Marcar consulta",
+    "modal_title": "Agendar servico",
+    "step_date": "Seleciona o dia e hora",
+    "no_slots": "Sem horarios disponiveis para este dia.",
+    "next": "Continuar",
+    "step_details": "Os teus dados",
+    "name_label": "Nome completo",
+    "email_label": "Email",
+    "phone_label": "Telefone (opcional)",
+    "notes_label": "Notas (opcional)",
+    "back": "Voltar",
+    "submit": "Confirmar marcacao",
+    "step_confirm": "Marcacao confirmada!",
+    "success_message": "Recebemos o teu pedido. Entraremos em contacto em breve para confirmar.",
+    "error_message": "Ocorreu um erro. Por favor tenta novamente."
+  }
+}

@@ -1,0 +1,98 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model ServiceConfig {
+  id            String   @id @default(cuid())
+  shop          String
+  productId     String   // numeric Shopify product ID (e.g. "12345")
+  productTitle  String   @default("")
+  staffId       String?  // profissional_card metaobject GID
+  staffName     String?
+  availableDays String   @default("[]") // JSON: ["monday","tuesday",...]
+  startTime     String   @default("09:00")
+  endTime       String   @default("18:00")
+  slotDuration  Int      @default(30)  // minutes
+  color         String   @default("#2c6ecb") // calendar label color
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([shop, productId])
+}
+
+model CustomerPackage {
+  id                String   @id @default(cuid())
+  shop              String
+  shopifyCustomerId String   // Shopify customer GID numeric part
+  customerEmail     String?
+  customerName      String?
+  orderId           String?  // Shopify order that triggered the package
+  orderName         String?  // e.g. "#1042"
+  serviceProductId  String   // numeric product ID of the linked service
+  serviceTitle      String
+  creditsTotal      Int      // e.g. 5
+  creditsUsed       Int      @default(0)
+  status            String   @default("active") // active | exhausted | cancelled
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  bookings          Booking[]
+
+  @@index([shop, shopifyCustomerId])
+  @@index([shop, serviceProductId])
+}
+
+model Booking {
+  id            String   @id @default(cuid())
+  shop          String
+  orderId       String?  @unique // Shopify order ID — prevents duplicate bookings
+  productId     String   // numeric Shopify product ID
+  productTitle  String
+  staffId       String?
+  staffName     String?
+  date          String   // YYYY-MM-DD
+  time          String   // HH:MM
+  customerName  String?  // pulled from Shopify Admin order if needed
+  customerEmail String?
+  customerPhone String?
+  notes         String?
+  status        String   @default("pending") // pending | confirmed | cancelled
+  packageId     String?  // if booked via a CustomerPackage
+  package       CustomerPackage? @relation(fields: [packageId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shop, productId, date])
+}
