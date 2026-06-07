@@ -2,7 +2,7 @@
 
 client_id = "d9c9e2f6f4e98a5bdaace627797863bd"
 name = "services-booking"
-application_url = "https://assurance-commands-provisions-luxury.trycloudflare.com"
+application_url = "https://services-booking-kappa.vercel.app"
 embedded = true
 
 [access_scopes]
@@ -26,7 +26,7 @@ api_version = "2026-07"
   include_fields = [ "id", "name", "order_number", "customer", "line_items" ]
 
 [auth]
-redirect_urls = [ "https://assurance-commands-provisions-luxury.trycloudflare.com/api/auth" ]
+redirect_urls = [ "https://services-booking-kappa.vercel.app/api/auth" ]
 
 [build]
 automatically_update_urls_on_dev = true
