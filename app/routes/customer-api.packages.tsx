@@ -26,7 +26,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const packages = await (prisma as any).customerPackage.findMany({
-    where: { shop, shopifyCustomerId: customerId },
+    where: { shop, shopifyCustomerId: customerId, status: { not: "cancelled" } },
     orderBy: { createdAt: "desc" },
     include: {
       bookings: {
@@ -83,6 +83,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (pkg.creditsUsed >= pkg.creditsTotal) {
     return Response.json({ error: "No credits remaining" }, { status: 400, headers: CORS });
+  }
+
+  // If any PackageConfig for this service has maxPerCustomer set, enforce it at booking time.
+  // We count actual non-cancelled bookings this customer made via packages for this service —
+  // that way a customer with multiple stale/test packages can't bypass the per-customer limit.
+  const maxCfg = await (prisma as any).packageConfig.findFirst({
+    where: { shop, serviceProductId: pkg.serviceProductId, maxPerCustomer: { not: null } },
+    orderBy: { maxPerCustomer: "asc" },
+  });
+  if (maxCfg?.maxPerCustomer != null) {
+    const customerPkgIds = await (prisma as any).customerPackage.findMany({
+      where: { shop, shopifyCustomerId: customerId, serviceProductId: pkg.serviceProductId },
+      select: { id: true },
+    });
+    const pkgIds = customerPkgIds.map((p: any) => p.id);
+    const usedBookings = await (prisma as any).booking.count({
+      where: { packageId: { in: pkgIds }, status: { not: "cancelled" } },
+    });
+    if (usedBookings >= maxCfg.maxPerCustomer) {
+      return Response.json({
+        error: `Este serviço tem um limite de ${maxCfg.maxPerCustomer} consulta${maxCfg.maxPerCustomer !== 1 ? "s" : ""} por cliente.`,
+      }, { status: 400, headers: CORS });
+    }
   }
 
   // Check slot is not already booked
