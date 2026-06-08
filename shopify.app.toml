@@ -25,6 +25,11 @@ api_version = "2026-07"
   topics = [ "orders/paid" ]
   include_fields = [ "id", "name", "order_number", "customer", "line_items" ]
 
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/cancelled"
+  topics = [ "orders/cancelled" ]
+  include_fields = [ "id" ]
+
 [auth]
 redirect_urls = [
   "https://services-booking-kappa.vercel.app/auth/callback",

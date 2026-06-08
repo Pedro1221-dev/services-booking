@@ -85,23 +85,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ error: "No credits remaining" }, { status: 400, headers: CORS });
   }
 
-  // Check per-customer limit defined on the PackageConfig for this package's variant
-  // (maxPerCustomer limits how many total packages of the same service this customer can have active/exhausted)
-  const allCustomerPkgs = await (prisma as any).customerPackage.count({
-    where: { shop, shopifyCustomerId: customerId, serviceProductId: pkg.serviceProductId },
-  });
-  // Find any PackageConfig for this service that has a maxPerCustomer set
-  // (we use the most restrictive limit across all configs for this service)
-  const restrictedCfg = await (prisma as any).packageConfig.findFirst({
-    where: { shop, serviceProductId: pkg.serviceProductId, maxPerCustomer: { not: null } },
-    orderBy: { maxPerCustomer: "asc" },
-  });
-  if (restrictedCfg?.maxPerCustomer != null && allCustomerPkgs > restrictedCfg.maxPerCustomer) {
-    return Response.json({
-      error: `Este serviço tem um limite de ${restrictedCfg.maxPerCustomer} marcação${restrictedCfg.maxPerCustomer !== 1 ? "ões" : ""} por cliente.`,
-    }, { status: 400, headers: CORS });
-  }
-
   // Check slot is not already booked
   const conflict = await (prisma as any).booking.findFirst({
     where: { shop, productId: pkg.serviceProductId, date, time, status: { not: "cancelled" } },
@@ -116,30 +99,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 
   // Create booking + consume credit atomically
-  const [booking] = await (prisma as any).$transaction([
-    (prisma as any).booking.create({
-      data: {
-        shop,
-        productId: pkg.serviceProductId,
-        productTitle: pkg.serviceTitle,
-        date,
-        time,
-        staffId: config?.staffId ?? null,
-        staffName: config?.staffName ?? null,
-        customerName: customerName ?? pkg.customerName ?? null,
-        customerEmail: customerEmail ?? pkg.customerEmail ?? null,
-        status: "confirmed",
-        packageId: pkg.id,
-      },
-    }),
-    (prisma as any).customerPackage.update({
-      where: { id: pkg.id },
-      data: {
-        creditsUsed: { increment: 1 },
-        status: pkg.creditsUsed + 1 >= pkg.creditsTotal ? "exhausted" : "active",
-      },
-    }),
-  ]);
+  let booking: any;
+  try {
+    [booking] = await (prisma as any).$transaction([
+      (prisma as any).booking.create({
+        data: {
+          shop,
+          productId: pkg.serviceProductId,
+          productTitle: pkg.serviceTitle,
+          date,
+          time,
+          staffId: config?.staffId ?? null,
+          staffName: config?.staffName ?? null,
+          customerName: customerName ?? pkg.customerName ?? null,
+          customerEmail: customerEmail ?? pkg.customerEmail ?? null,
+          status: "confirmed",
+          packageId: pkg.id,
+        },
+      }),
+      (prisma as any).customerPackage.update({
+        where: { id: pkg.id },
+        data: {
+          creditsUsed: { increment: 1 },
+          status: pkg.creditsUsed + 1 >= pkg.creditsTotal ? "exhausted" : "active",
+        },
+      }),
+    ]);
+  } catch (e: any) {
+    if (e?.code === "P2002") {
+      return Response.json({ error: "Slot already booked" }, { status: 409, headers: CORS });
+    }
+    throw e;
+  }
 
   return Response.json({ ok: true, bookingId: booking.id }, { headers: CORS });
 };

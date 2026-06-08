@@ -153,7 +153,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (bookingsToCreate.length > 0) {
-    await (prisma as any).booking.createMany({ data: bookingsToCreate });
+    // skipDuplicates: if the unique slot index fires (race condition between two simultaneous orders),
+    // the later booking is silently skipped rather than crashing the webhook.
+    await (prisma as any).booking.createMany({ data: bookingsToCreate, skipDuplicates: true });
     console.log(`[orders/paid] Created ${bookingsToCreate.length} booking(s) for order ${orderId}`);
   }
 
