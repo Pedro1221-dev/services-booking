@@ -294,11 +294,13 @@ function PackagesPage() {
         if (!shopDomain) throw new Error('Não foi possível determinar a loja.');
         setShop(shopDomain);
 
-        // Customer data from Customer Account GraphQL API (auto-authenticated)
+        // Customer id from Customer Account GraphQL API (auto-authenticated)
+        // Only request `id` — name/email require protected data scopes we don't need
+        // (backend already stores name/email from the order webhook)
         const r = await fetch(CA_GRAPHQL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: '{ customer { id firstName lastName emailAddress { emailAddress } } }' }),
+          body: JSON.stringify({ query: '{ customer { id } }' }),
         });
         const data = await r.json();
         const c = data?.data?.customer;
@@ -307,8 +309,8 @@ function PackagesPage() {
         const numericId = c.id.split('/').pop();
         const cust = {
           numericId,
-          name:  `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim(),
-          email: c.emailAddress?.emailAddress ?? '',
+          name:  '',
+          email: '',
         };
         setCustomer(cust);
 
