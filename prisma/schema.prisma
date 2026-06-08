@@ -58,11 +58,10 @@ model PackageConfig {
   shop             String
   variantId        String   // Shopify variant numeric ID
   variantTitle     String   // display label (e.g. "Pacote 5 Consultas")
-  productId        String   // package product numeric ID
-  productTitle     String   // package product title
-  serviceProductId String   // service product numeric ID to book against
+  serviceProductId String   // service product numeric ID (same product the variant belongs to)
   serviceTitle     String   // service title
   creditsTotal     Int      // number of consultations in this package
+  maxPerCustomer   Int?     // if set: max times a customer can use this variant (e.g. 1 for free eval)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

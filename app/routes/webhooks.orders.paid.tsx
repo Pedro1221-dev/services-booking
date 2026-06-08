@@ -58,47 +58,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       item.properties.find((p) => p.name === name)?.value ?? null;
 
     // ── Package product — look up PackageConfig by variant ─────────────────
-    // Prefer DB config; fall back to legacy line-item properties for old orders.
-    let pkgServiceId: string | null = null;
-    let pkgCredits: number | null = null;
-    let pkgServiceTitle: string = item.title;
-
     if (variantId && customerId) {
       const pkgCfg = await (prisma as any).packageConfig.findUnique({
         where: { shop_variantId: { shop, variantId } },
       });
       if (pkgCfg) {
-        pkgServiceId  = pkgCfg.serviceProductId;
-        pkgCredits    = pkgCfg.creditsTotal;
-        pkgServiceTitle = pkgCfg.serviceTitle;
+        // Check per-customer limit before creating the package
+        if (pkgCfg.maxPerCustomer != null) {
+          const existing = await (prisma as any).customerPackage.count({
+            where: { shop, shopifyCustomerId: customerId, serviceProductId: pkgCfg.serviceProductId },
+          });
+          if (existing >= pkgCfg.maxPerCustomer) {
+            console.log(`[orders/paid] Customer ${customerId} hit maxPerCustomer (${pkgCfg.maxPerCustomer}) for variant ${variantId} — skipping`);
+            continue;
+          }
+        }
+        for (let q = 0; q < ((item as any).quantity ?? 1); q++) {
+          packagesToCreate.push({
+            shop,
+            shopifyCustomerId: customerId,
+            customerEmail,
+            customerName,
+            orderId: q === 0 ? orderId : `${orderId}_pkg_${q}`,
+            orderName,
+            serviceProductId: pkgCfg.serviceProductId,
+            serviceTitle: pkgCfg.serviceTitle,
+            creditsTotal: pkgCfg.creditsTotal,
+            creditsUsed: 0,
+            status: "active",
+          });
+        }
+        console.log(`[orders/paid] Package: ${pkgCfg.serviceTitle} x${(item as any).quantity ?? 1} (${pkgCfg.creditsTotal} credits)`);
+        continue;
       }
-    }
-    // Legacy fallback: line-item properties
-    if (!pkgServiceId) {
-      pkgServiceId  = getProperty("_package_service_id");
-      const raw     = getProperty("_package_credits");
-      pkgCredits    = raw ? parseInt(raw, 10) : null;
-      pkgServiceTitle = getProperty("_package_service_title") ?? item.title;
-    }
-
-    if (pkgServiceId && pkgCredits && pkgCredits > 0 && customerId) {
-      for (let q = 0; q < (item.quantity ?? 1); q++) {
-        packagesToCreate.push({
-          shop,
-          shopifyCustomerId: customerId,
-          customerEmail,
-          customerName,
-          orderId: q === 0 ? orderId : `${orderId}_pkg_${q}`,
-          orderName,
-          serviceProductId: pkgServiceId,
-          serviceTitle: pkgServiceTitle,
-          creditsTotal: pkgCredits,
-          creditsUsed: 0,
-          status: "active",
-        });
-      }
-      console.log(`[orders/paid] Package detected: ${pkgServiceTitle} x${item.quantity} (${pkgCredits} credits each)`);
-      continue;
     }
 
     // ── Regular booking product ────────────────────────────────────────────

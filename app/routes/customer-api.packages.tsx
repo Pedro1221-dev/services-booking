@@ -85,35 +85,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ error: "No credits remaining" }, { status: 400, headers: CORS });
   }
 
-  // Check per-customer limit for this service
-  const svcConfig = await (prisma as any).serviceConfig.findFirst({
-    where: { shop, productId: pkg.serviceProductId },
-    select: { maxPerCustomer: true },
+  // Check per-customer limit defined on the PackageConfig for this package's variant
+  // (maxPerCustomer limits how many total packages of the same service this customer can have active/exhausted)
+  const allCustomerPkgs = await (prisma as any).customerPackage.count({
+    where: { shop, shopifyCustomerId: customerId, serviceProductId: pkg.serviceProductId },
   });
-  if (svcConfig?.maxPerCustomer != null) {
-    const existingCount = await (prisma as any).booking.count({
-      where: {
-        shop,
-        productId: pkg.serviceProductId,
-        status: { not: "cancelled" },
-        package: { shopifyCustomerId: customerId },
-      },
-    });
-    // Also count direct bookings for this customer+service (not via package)
-    const directCount = await (prisma as any).booking.count({
-      where: {
-        shop,
-        productId: pkg.serviceProductId,
-        status: { not: "cancelled" },
-        packageId: null,
-        customerEmail: pkg.customerEmail ?? undefined,
-      },
-    });
-    if (existingCount + directCount >= svcConfig.maxPerCustomer) {
-      return Response.json({
-        error: `Este serviço tem um limite de ${svcConfig.maxPerCustomer} marcação${svcConfig.maxPerCustomer !== 1 ? "ões" : ""} por cliente.`,
-      }, { status: 400, headers: CORS });
-    }
+  // Find any PackageConfig for this service that has a maxPerCustomer set
+  // (we use the most restrictive limit across all configs for this service)
+  const restrictedCfg = await (prisma as any).packageConfig.findFirst({
+    where: { shop, serviceProductId: pkg.serviceProductId, maxPerCustomer: { not: null } },
+    orderBy: { maxPerCustomer: "asc" },
+  });
+  if (restrictedCfg?.maxPerCustomer != null && allCustomerPkgs > restrictedCfg.maxPerCustomer) {
+    return Response.json({
+      error: `Este serviço tem um limite de ${restrictedCfg.maxPerCustomer} marcação${restrictedCfg.maxPerCustomer !== 1 ? "ões" : ""} por cliente.`,
+    }, { status: 400, headers: CORS });
   }
 
   // Check slot is not already booked
