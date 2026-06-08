@@ -20,7 +20,7 @@ function pad(n) { return String(n).padStart(2, '0'); }
 function toDateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 function formatDate(s) {
   if (!s) return '';
-  const d = new Date(s + 'T12:00:00');
+  const d = new Date(s.includes('T') ? s : s + 'T12:00:00');
   return `${d.getDate()} ${PT_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
@@ -222,7 +222,7 @@ function PackageCard({ pkg, shop, customer, appUrl, onBooked }) {
 
         {/* Credits */}
         <s-text>{pkg.creditsUsed} de {pkg.creditsTotal} consultas usadas · {pkg.creditsRemaining} restante{pkg.creditsRemaining !== 1 ? 's' : ''}</s-text>
-        <s-progress value={pct} />
+        {pct > 0 && <s-progress value={pct} max={100} />}
 
         {/* Meta */}
         <s-text>Comprado em {formatDate(pkg.createdAt)} · {pkg.orderName}</s-text>

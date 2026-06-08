@@ -49,6 +49,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const bookingsToCreate: any[] = [];
   const packagesToCreate: any[] = [];
+  // Packages that need an initial booking linked (bought with date+time at checkout)
+  type InitialPkgBooking = {
+    packageOrderId: string;
+    shop: string;
+    serviceProductId: string;
+    serviceTitle: string;
+    date: string;
+    time: string;
+    customerName: string | null;
+    customerEmail: string | null;
+    customerPhone: string | null;
+  };
+  const initialPkgBookings: InitialPkgBooking[] = [];
 
   for (const item of order.line_items) {
     if (!item.product_id) continue;
@@ -73,22 +86,46 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             continue;
           }
         }
-        for (let q = 0; q < ((item as any).quantity ?? 1); q++) {
+
+        // If the line item also has booking date+time, the first package will
+        // consume 1 credit immediately for that checkout booking.
+        const initDate = getProperty("Data da marcação") ?? getProperty("_booking_date");
+        const initTime = getProperty("Hora da marcação") ?? getProperty("_booking_time");
+        const hasInitBooking = !!(initDate && initTime);
+
+        const qty = (item as any).quantity ?? 1;
+        for (let q = 0; q < qty; q++) {
+          const pkgOrderId = q === 0 ? orderId : `${orderId}_pkg_${q}`;
+          const isFirst = q === 0;
+          const creditsUsed = isFirst && hasInitBooking ? 1 : 0;
           packagesToCreate.push({
             shop,
             shopifyCustomerId: customerId,
             customerEmail,
             customerName,
-            orderId: q === 0 ? orderId : `${orderId}_pkg_${q}`,
+            orderId: pkgOrderId,
             orderName,
             serviceProductId: pkgCfg.serviceProductId,
             serviceTitle: pkgCfg.serviceTitle,
             creditsTotal: pkgCfg.creditsTotal,
-            creditsUsed: 0,
-            status: "active",
+            creditsUsed,
+            status: creditsUsed >= pkgCfg.creditsTotal ? "exhausted" : "active",
           });
+          if (isFirst && hasInitBooking) {
+            initialPkgBookings.push({
+              packageOrderId: pkgOrderId,
+              shop,
+              serviceProductId: pkgCfg.serviceProductId,
+              serviceTitle: pkgCfg.serviceTitle,
+              date: initDate!,
+              time: initTime!,
+              customerName,
+              customerEmail,
+              customerPhone: order.customer?.phone ?? null,
+            });
+          }
         }
-        console.log(`[orders/paid] Package: ${pkgCfg.serviceTitle} x${(item as any).quantity ?? 1} (${pkgCfg.creditsTotal} credits)`);
+        console.log(`[orders/paid] Package: ${pkgCfg.serviceTitle} x${qty} (${pkgCfg.creditsTotal} credits)${hasInitBooking ? ` + init booking ${initDate} ${initTime}` : ""}`);
         continue;
       }
     }
@@ -123,6 +160,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (packagesToCreate.length > 0) {
     await (prisma as any).customerPackage.createMany({ data: packagesToCreate });
     console.log(`[orders/paid] Created ${packagesToCreate.length} package(s) for order ${orderId}`);
+  }
+
+  // Create bookings that were selected at checkout and link them to their package
+  for (const ib of initialPkgBookings) {
+    const pkg = await (prisma as any).customerPackage.findFirst({
+      where: { shop: ib.shop, orderId: ib.packageOrderId },
+    });
+    if (!pkg) continue;
+    const config = await (prisma as any).serviceConfig.findFirst({
+      where: { shop: ib.shop, productId: ib.serviceProductId },
+    });
+    await (prisma as any).booking.create({
+      data: {
+        shop: ib.shop,
+        orderId: `${ib.packageOrderId}_init`,
+        productId: ib.serviceProductId,
+        productTitle: ib.serviceTitle,
+        date: ib.date,
+        time: ib.time,
+        staffId: config?.staffId ?? null,
+        staffName: config?.staffName ?? null,
+        customerName: ib.customerName,
+        customerEmail: ib.customerEmail,
+        customerPhone: ib.customerPhone,
+        status: "confirmed",
+        packageId: pkg.id,
+      },
+    });
+    console.log(`[orders/paid] Linked init booking ${ib.date} ${ib.time} to package ${pkg.id}`);
   }
 
   return new Response("OK", { status: 200 });
