@@ -35,21 +35,39 @@ model Session {
 }
 
 model ServiceConfig {
-  id            String   @id @default(cuid())
-  shop          String
-  productId     String   // numeric Shopify product ID (e.g. "12345")
-  productTitle  String   @default("")
-  staffId       String?  // profissional_card metaobject GID
-  staffName     String?
-  availableDays String   @default("[]") // JSON: ["monday","tuesday",...]
-  startTime     String   @default("09:00")
-  endTime       String   @default("18:00")
-  slotDuration  Int      @default(30)  // minutes
-  color         String   @default("#2c6ecb") // calendar label color
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String   @id @default(cuid())
+  shop             String
+  productId        String   // numeric Shopify product ID (e.g. "12345")
+  productTitle     String   @default("")
+  staffId          String?  // profissional_card metaobject GID
+  staffName        String?
+  availableDays    String   @default("[]") // JSON: ["monday","tuesday",...]
+  startTime        String   @default("09:00")
+  endTime          String   @default("18:00")
+  slotDuration     Int      @default(30)  // minutes
+  color            String   @default("#2c6ecb") // calendar label color
+  maxPerCustomer   Int?     // if set: max total bookings per customer for this service
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([shop, productId])
+}
+
+model PackageConfig {
+  id               String   @id @default(cuid())
+  shop             String
+  variantId        String   // Shopify variant numeric ID
+  variantTitle     String   // display label (e.g. "Pacote 5 Consultas")
+  productId        String   // package product numeric ID
+  productTitle     String   // package product title
+  serviceProductId String   // service product numeric ID to book against
+  serviceTitle     String   // service title
+  creditsTotal     Int      // number of consultations in this package
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([shop, variantId])
+  @@index([shop])
 }
 
 model CustomerPackage {

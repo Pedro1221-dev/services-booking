@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PRODUCTION_APP_URL = 'https://services-booking-kappa.vercel.app';
-const CA_GRAPHQL = 'shopify://customer-account/api/2026-04/graphql.json';
 
 function getAppUrl() {
   try {
@@ -294,19 +293,12 @@ function PackagesPage() {
         if (!shopDomain) throw new Error('Não foi possível determinar a loja.');
         setShop(shopDomain);
 
-        // Customer id from Customer Account GraphQL API (auto-authenticated)
-        // Only request `id` — name/email require protected data scopes we don't need
-        // (backend already stores name/email from the order webhook)
-        const r = await fetch(CA_GRAPHQL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: '{ customer { id } }' }),
-        });
-        const data = await r.json();
-        const c = data?.data?.customer;
-        if (!c?.id) throw new Error('Não foi possível identificar o cliente. Certifica-te que estás autenticado.');
+        // Customer ID from the extension's authenticated account signal — no GraphQL needed,
+        // no extra scopes required. Returns { id: "gid://shopify/Customer/<id>" }.
+        const customerSignal = shopifyGlobal.authenticatedAccount?.customer?.value;
+        if (!customerSignal?.id) throw new Error('Não foi possível identificar o cliente. Certifica-te que estás autenticado.');
 
-        const numericId = c.id.split('/').pop();
+        const numericId = customerSignal.id.split('/').pop();
         const cust = {
           numericId,
           name:  '',

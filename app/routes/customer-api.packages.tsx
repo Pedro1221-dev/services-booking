@@ -85,6 +85,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ error: "No credits remaining" }, { status: 400, headers: CORS });
   }
 
+  // Check per-customer limit for this service
+  const svcConfig = await (prisma as any).serviceConfig.findFirst({
+    where: { shop, productId: pkg.serviceProductId },
+    select: { maxPerCustomer: true },
+  });
+  if (svcConfig?.maxPerCustomer != null) {
+    const existingCount = await (prisma as any).booking.count({
+      where: {
+        shop,
+        productId: pkg.serviceProductId,
+        status: { not: "cancelled" },
+        package: { shopifyCustomerId: customerId },
+      },
+    });
+    // Also count direct bookings for this customer+service (not via package)
+    const directCount = await (prisma as any).booking.count({
+      where: {
+        shop,
+        productId: pkg.serviceProductId,
+        status: { not: "cancelled" },
+        packageId: null,
+        customerEmail: pkg.customerEmail ?? undefined,
+      },
+    });
+    if (existingCount + directCount >= svcConfig.maxPerCustomer) {
+      return Response.json({
+        error: `Este serviço tem um limite de ${svcConfig.maxPerCustomer} marcação${svcConfig.maxPerCustomer !== 1 ? "ões" : ""} por cliente.`,
+      }, { status: 400, headers: CORS });
+    }
+  }
+
   // Check slot is not already booked
   const conflict = await (prisma as any).booking.findFirst({
     where: { shop, productId: pkg.serviceProductId, date, time, status: { not: "cancelled" } },

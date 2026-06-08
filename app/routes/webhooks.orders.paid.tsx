@@ -53,38 +53,52 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   for (const item of order.line_items) {
     if (!item.product_id) continue;
     const productId = String(item.product_id);
+    const variantId = String((item as any).variant_id ?? "");
     const getProperty = (name: string) =>
       item.properties.find((p) => p.name === name)?.value ?? null;
 
-    // ── Package product (tag: pacote_servico) ──────────────────────────────
-    // We detect packages via a property "_package_service_id" and "_package_credits"
-    // set on the line item (via the product metafields at add-to-cart time).
-    const pkgServiceId = getProperty("_package_service_id");
-    const pkgCredits   = getProperty("_package_credits");
-    const pkgServiceTitle = getProperty("_package_service_title") ?? item.title;
+    // ── Package product — look up PackageConfig by variant ─────────────────
+    // Prefer DB config; fall back to legacy line-item properties for old orders.
+    let pkgServiceId: string | null = null;
+    let pkgCredits: number | null = null;
+    let pkgServiceTitle: string = item.title;
 
-    if (pkgServiceId && pkgCredits && customerId) {
-      const credits = parseInt(pkgCredits, 10);
-      if (!isNaN(credits) && credits > 0) {
-        // Create one package per quantity purchased
-        for (let q = 0; q < (item.quantity ?? 1); q++) {
-          packagesToCreate.push({
-            shop,
-            shopifyCustomerId: customerId,
-            customerEmail,
-            customerName,
-            orderId: q === 0 ? orderId : `${orderId}_pkg_${q}`,
-            orderName,
-            serviceProductId: pkgServiceId,
-            serviceTitle: pkgServiceTitle,
-            creditsTotal: credits,
-            creditsUsed: 0,
-            status: "active",
-          });
-        }
-        console.log(`[orders/paid] Package detected: ${pkgServiceTitle} x${item.quantity} (${credits} credits each)`);
-        continue; // not a direct booking
+    if (variantId && customerId) {
+      const pkgCfg = await (prisma as any).packageConfig.findUnique({
+        where: { shop_variantId: { shop, variantId } },
+      });
+      if (pkgCfg) {
+        pkgServiceId  = pkgCfg.serviceProductId;
+        pkgCredits    = pkgCfg.creditsTotal;
+        pkgServiceTitle = pkgCfg.serviceTitle;
       }
+    }
+    // Legacy fallback: line-item properties
+    if (!pkgServiceId) {
+      pkgServiceId  = getProperty("_package_service_id");
+      const raw     = getProperty("_package_credits");
+      pkgCredits    = raw ? parseInt(raw, 10) : null;
+      pkgServiceTitle = getProperty("_package_service_title") ?? item.title;
+    }
+
+    if (pkgServiceId && pkgCredits && pkgCredits > 0 && customerId) {
+      for (let q = 0; q < (item.quantity ?? 1); q++) {
+        packagesToCreate.push({
+          shop,
+          shopifyCustomerId: customerId,
+          customerEmail,
+          customerName,
+          orderId: q === 0 ? orderId : `${orderId}_pkg_${q}`,
+          orderName,
+          serviceProductId: pkgServiceId,
+          serviceTitle: pkgServiceTitle,
+          creditsTotal: pkgCredits,
+          creditsUsed: 0,
+          status: "active",
+        });
+      }
+      console.log(`[orders/paid] Package detected: ${pkgServiceTitle} x${item.quantity} (${pkgCredits} credits each)`);
+      continue;
     }
 
     // ── Regular booking product ────────────────────────────────────────────

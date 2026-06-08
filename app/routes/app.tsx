@@ -21,6 +21,7 @@ export default function App() {
         <s-link href="/app">Dashboard</s-link>
         <s-link href="/app/calendar">Calendário</s-link>
         <s-link href="/app/services">Serviços</s-link>
+        <s-link href="/app/package-configs">Pacotes</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>
