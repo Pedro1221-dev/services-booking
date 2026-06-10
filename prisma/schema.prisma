@@ -47,6 +47,8 @@ model ServiceConfig {
   slotDuration     Int      @default(30)  // minutes
   color            String   @default("#2c6ecb") // calendar label color
   maxPerCustomer   Int?     // if set: max total bookings per customer for this service
+  schedule         String   @default("{}") // JSON: WeekSchedule { day: [{start,end},...] }
+  staffList        String   @default("[]") // JSON: [{id,name},...] — multiple staff members
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
