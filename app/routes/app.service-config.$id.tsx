@@ -9,7 +9,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import prisma from "../db.server";
 import { useEffect, useState, useRef } from "react";
-import { DAY_ORDER, DAY_LABELS } from "../utils/availability.server";
+import { DAY_ORDER, DAY_LABELS } from "../utils/days";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types

@@ -13,25 +13,7 @@ const DAYS = [
   "saturday",
 ];
 
-export const DAY_LABELS: Record<string, string> = {
-  monday: "Segunda-feira",
-  tuesday: "Terça-feira",
-  wednesday: "Quarta-feira",
-  thursday: "Quinta-feira",
-  friday: "Sexta-feira",
-  saturday: "Sábado",
-  sunday: "Domingo",
-};
-
-export const DAY_ORDER = [
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-  "sunday",
-];
+export { DAY_LABELS, DAY_ORDER } from "./days";
 
 /** Given a YYYY-MM-DD date string, returns the lowercase day name (e.g. "monday") */
 export function getDayName(date: string): string {
