@@ -2,6 +2,30 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
+/** Picks the first staff member from the service's staffList who isn't already booked at the given slot. */
+async function pickAvailableStaff(
+  db: typeof prisma,
+  config: any,
+  shop: string,
+  productId: string,
+  date: string,
+  time: string,
+): Promise<{ staffId: string | null; staffName: string | null }> {
+  const staffList: { id: string; name: string }[] = config?.staffList
+    ? JSON.parse(config.staffList)
+    : [];
+  if (staffList.length === 0) {
+    return { staffId: config?.staffId ?? null, staffName: config?.staffName ?? null };
+  }
+  const booked = await (db as any).booking.findMany({
+    where: { shop, productId, date, time, status: { not: "cancelled" } },
+    select: { staffId: true },
+  });
+  const busyIds = new Set(booked.map((b: any) => b.staffId));
+  const available = staffList.find((s) => !busyIds.has(s.id)) ?? staffList[0];
+  return { staffId: available.id, staffName: available.name };
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, shop, payload } = await authenticate.webhook(request);
 
@@ -136,6 +160,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!bookingDate || !bookingTime) continue;
 
     const config = await (prisma as any).serviceConfig.findFirst({ where: { shop, productId } });
+    const { staffId, staffName } = await pickAvailableStaff(prisma, config, shop, productId, bookingDate, bookingTime);
     bookingsToCreate.push({
       shop,
       orderId: bookingsToCreate.length === 0 ? orderId : `${orderId}_${bookingsToCreate.length}`,
@@ -143,8 +168,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       productTitle: item.title,
       date: bookingDate,
       time: bookingTime,
-      staffId: config?.staffId ?? null,
-      staffName: config?.staffName ?? null,
+      staffId,
+      staffName,
       customerName,
       customerEmail,
       customerPhone: order.customer?.phone ?? null,
@@ -173,6 +198,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const config = await (prisma as any).serviceConfig.findFirst({
       where: { shop: ib.shop, productId: ib.serviceProductId },
     });
+    const { staffId, staffName } = await pickAvailableStaff(prisma, config, ib.shop, ib.serviceProductId, ib.date, ib.time);
     await (prisma as any).booking.create({
       data: {
         shop: ib.shop,
@@ -181,8 +207,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         productTitle: ib.serviceTitle,
         date: ib.date,
         time: ib.time,
-        staffId: config?.staffId ?? null,
-        staffName: config?.staffName ?? null,
+        staffId,
+        staffName,
         customerName: ib.customerName,
         customerEmail: ib.customerEmail,
         customerPhone: ib.customerPhone,

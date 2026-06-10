@@ -39,7 +39,7 @@ export function getDayName(date: string): string {
   return DAYS[d.getDay()];
 }
 
-/** Returns true if the given date falls on one of the available days */
+/** Returns true if the given date falls on one of the available days (legacy format) */
 export function isDayAvailable(date: string, availableDays: string[]): boolean {
   const dayName = getDayName(date);
   return availableDays.includes(dayName);
@@ -55,7 +55,7 @@ export function generateSlots(
   endTime: string,
   durationMinutes: number,
   bookedTimes: string[],
-  minTime?: string,   // optional — slots strictly before this are marked unavailable
+  minTime?: string,
 ): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const [startH, startM] = startTime.split(":").map(Number);
@@ -80,4 +80,50 @@ export function generateSlots(
   }
 
   return slots;
+}
+
+// ── New schedule-based types & helpers ────────────────────────────────────────
+
+export type DayIntervals = { start: string; end: string }[];
+export type WeekSchedule = Partial<Record<string, DayIntervals>>;
+
+/** Returns true if the date falls on an active day in the new schedule format */
+export function isDayAvailableInSchedule(date: string, schedule: WeekSchedule): boolean {
+  return (schedule[getDayName(date)]?.length ?? 0) > 0;
+}
+
+/**
+ * Generates slots from a WeekSchedule for a given date.
+ *
+ * staffCount > 1: a time slot is only "full" when bookings at that time >= staffCount,
+ * allowing multiple simultaneous bookings (one per staff member).
+ */
+export function generateSlotsFromSchedule(
+  date: string,
+  schedule: WeekSchedule,
+  durationMinutes: number,
+  bookedTimes: string[],
+  staffCount: number,
+  minTime?: string,
+): TimeSlot[] {
+  const intervals = schedule[getDayName(date)] ?? [];
+  if (intervals.length === 0) return [];
+
+  // With multiple staff, a slot is blocked only when all staff are booked
+  let blockedTimes: string[];
+  if (staffCount > 1) {
+    const counts = new Map<string, number>();
+    for (const t of bookedTimes) counts.set(t, (counts.get(t) ?? 0) + 1);
+    blockedTimes = [...counts.entries()]
+      .filter(([, n]) => n >= staffCount)
+      .map(([t]) => t);
+  } else {
+    blockedTimes = bookedTimes;
+  }
+
+  const all: TimeSlot[] = [];
+  for (const { start, end } of intervals) {
+    all.push(...generateSlots(start, end, durationMinutes, blockedTimes, minTime));
+  }
+  return all.sort((a, b) => a.time.localeCompare(b.time));
 }

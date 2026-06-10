@@ -116,10 +116,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ error: "Slot already booked" }, { status: 409, headers: CORS });
   }
 
-  // Get staff from service config
+  // Get staff from service config — pick an available staff member for this slot
   const config = await (prisma as any).serviceConfig.findFirst({
     where: { shop, productId: pkg.serviceProductId },
   });
+  const staffList: { id: string; name: string }[] = config?.staffList
+    ? JSON.parse(config.staffList)
+    : [];
+  let assignedStaffId: string | null = config?.staffId ?? null;
+  let assignedStaffName: string | null = config?.staffName ?? null;
+  if (staffList.length > 0) {
+    const booked = await (prisma as any).booking.findMany({
+      where: { shop, productId: pkg.serviceProductId, date, time, status: { not: "cancelled" } },
+      select: { staffId: true },
+    });
+    const busyIds = new Set(booked.map((b: any) => b.staffId));
+    const available = staffList.find((s) => !busyIds.has(s.id)) ?? staffList[0];
+    assignedStaffId = available.id;
+    assignedStaffName = available.name;
+  }
 
   // Create booking + consume credit atomically
   let booking: any;
@@ -132,8 +147,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           productTitle: pkg.serviceTitle,
           date,
           time,
-          staffId: config?.staffId ?? null,
-          staffName: config?.staffName ?? null,
+          staffId: assignedStaffId,
+          staffName: assignedStaffName,
           customerName: customerName ?? pkg.customerName ?? null,
           customerEmail: customerEmail ?? pkg.customerEmail ?? null,
           status: "confirmed",
